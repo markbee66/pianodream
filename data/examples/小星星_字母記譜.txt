@@ -1,0 +1,24 @@
+# 小星星　字母記譜範例
+# 跟「小星星_數字記譜.txt」是同一首曲子，只是音高改用音名寫。
+# 兩種寫法轉出來的樂譜完全一樣，挑自己順手的用就好。
+#
+#   run.py score new 小星星 --type letter
+#   run.py score add 小星星 data\examples\小星星_字母記譜.txt
+#   run.py score build 小星星
+
+TITLE=小星星
+KEY=C
+4/4
+BPM=100
+
+# 中央 C 記為 C4。八度寫在音名後面，不寫就沿用上一個音的八度。
+# 時值、小節線、和弦的寫法跟數字記譜完全相同。
+
+R: C4 C4 G4 G4 | A4 A4 G4 - | F4 F4 E4 E4 | D4 D4 C4 -
+L: [C3 G3] - [C3 G3] - | [C3 G3] - [G3 D3] - | [F3 C4] - [C3 G3] - | [G3 D3] - [C3 G3] -
+
+R: G4 G4 F4 F4 | E4 E4 D4 - | G4 G4 F4 F4 | E4 E4 D4 -
+L: [C3 G3] - [F3 C4] - | [G3 D3] - [C3 G3] - | [C3 G3] - [F3 C4] - | [G3 D3] - [C3 G3] -
+
+R: C4 C4 G4 G4 | A4 A4 G4 - | F4 F4 E4 E4 | D4 D4 C4 -
+L: [C3 G3] - [C3 G3] - | [C3 G3] - [G3 D3] - | [F3 C4] - [C3 G3] - | [G3 D3] - [C3 G3] -

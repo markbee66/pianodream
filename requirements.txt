@@ -1,0 +1,14 @@
+numpy
+scipy
+pandas
+mido
+partitura>=1.9.0
+parangonar>=3.3.0
+
+# 樂譜輸入（照片辨識 / 數字記譜 / 字母記譜）
+homr>=0.7.0          # OMR 引擎，會一併帶進 onnxruntime、opencv、rapidocr
+flask>=3.0           # 網頁介面
+pypdfium2            # 匯入 PDF 樂譜時逐頁轉圖
+
+# 電子琴 MIDI 輸入（Windows 上有時要單獨裝）
+# python-rtmidi

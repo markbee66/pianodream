@@ -1,0 +1,47 @@
+.venv/
+__pycache__/
+*.pyc
+out/
+data/performances/latest_take.mid
+requirements.lock.txt
+
+# ---------------------------------------------------------------------------
+# 太大 / 可以重新產生的資料
+# ---------------------------------------------------------------------------
+# 上傳的樂譜原圖與辨識中間產物。646 MB、871 個檔，而且重跑 build 就會再生出來。
+data/projects/
+# 效能基準用的資料集，333 MB，從外部樂譜庫下載的。
+data/omr_bench/
+
+# 注意：`data/charts/` **有**進版控（8.6 MB）。Unity 的選曲畫面就是讀它，
+# 不放的話 clone 下來一首歌都沒有，而要重新產生得跑完整條 OMR 流程。
+
+# ---------------------------------------------------------------------------
+# Unity
+# ---------------------------------------------------------------------------
+# 只留「重建專案需要的三個資料夾」：Assets / Packages / ProjectSettings。
+# 其餘全部是 Unity 自己生的，clone 下來第一次開啟時會重建。
+# Library 一個就 83 MB / 7770 個檔案，進版控只會讓每次 pull 都在打架。
+音遊/Library/
+音遊/Temp/
+音遊/Logs/
+音遊/Obj/
+音遊/obj/
+音遊/Build/
+音遊/Builds/
+音遊/UserSettings/
+音遊/MemoryCaptures/
+音遊/Recordings/
+*.csproj
+*.sln
+*.slnx
+*.unityproj
+*.booproj
+*.pidb
+*.suo
+*.user
+*.userprefs
+sysinfo.txt
+*.apk
+*.aab
+*.unitypackage

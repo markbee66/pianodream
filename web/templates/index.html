@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>樂譜輸入 — 鋼琴演奏評估 AI</title>
+<link rel="stylesheet" href="/static/style.css">
+<script>
+/* 主題要在第一次繪製之前就決定，否則深色使用者會先看到一閃的白畫面。
+   放在 <head> 內聯、不放 app.js —— app.js 是 <body> 結尾才載入的，那時已經畫過了。 */
+(function () {
+  try {
+    var saved = localStorage.getItem("pianoai.theme");
+    if (saved === "dark" || saved === "light") {
+      document.documentElement.dataset.theme = saved;
+    }
+  } catch (e) { /* 隱私模式讀不到 localStorage，那就跟隨系統設定 */ }
+})();
+</script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">♪</span>
+    <span class="brand-text">樂譜輸入</span>
+  </div>
+  <div class="project-picker">
+    <select id="project-select" aria-label="選擇專案"></select>
+    <button id="btn-new" class="ghost">新增專案</button>
+    <button id="btn-delete" class="ghost danger" title="刪除目前的專案">刪除</button>
+    <button id="theme-toggle" class="icon-btn" title="切換深色 / 淺色" aria-label="切換深色或淺色"></button>
+  </div>
+</header>
+
+<main id="app" hidden>
+
+  <!-- 步驟列。每一格連到下面對應的區塊，狀態由 app.js 的 render() 掛 class。 -->
+  <nav id="step-rail" class="step-rail" aria-label="流程步驟">
+    <a class="rail-step" href="#step-1" data-step="1"><b>1</b><span>上傳</span></a>
+    <a class="rail-step" href="#step-2" data-step="2"><b>2</b><span>順序</span></a>
+    <a class="rail-step" href="#step-3" data-step="3"><b>3</b><span>辨識</span></a>
+    <a class="rail-step" href="#preview-panel" data-step="4"><b>4</b><span>試聽</span></a>
+    <a class="rail-step" href="#proof-panel" data-step="5"><b>5</b><span>校對</span></a>
+  </nav>
+
+  <!-- 1. 上傳 -->
+  <section class="panel step" id="step-1">
+    <h2><span class="step-num">1</span>上傳樂譜</h2>
+    <p class="hint" id="upload-hint"></p>
+    <div id="dropzone" class="dropzone" tabindex="0" role="button"
+         aria-label="點這裡選檔案，或把檔案拖進來">
+      <div class="dz-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="none"
+             stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 16V4"></path><path d="M7 9l5-5 5 5"></path>
+          <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path>
+        </svg>
+      </div>
+      <div class="dz-main">點這裡選檔案，或把檔案從檔案總管拖進來</div>
+      <div class="dz-sub" id="dz-formats"></div>
+    </div>
+    <input type="file" id="file-input" multiple hidden>
+    <div id="upload-status" class="status-line"></div>
+  </section>
+
+  <!-- 2. 順序 -->
+  <section class="panel step" id="step-2">
+    <h2><span class="step-num">2</span>確認順序<span class="sub">拖曳卡片可以調整；順序就是樂譜的頁序</span></h2>
+    <ol id="item-list" class="item-list"></ol>
+    <div id="empty-note" class="empty">
+      <div class="empty-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none"
+             stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+          <path d="M3 9h18"></path><path d="M9 9v11"></path>
+        </svg>
+      </div>
+      <b>還沒有任何內容</b>
+      <span>先在上面加入樂譜檔案，加進來的每一頁都會出現在這裡。</span>
+    </div>
+    <div class="row-actions">
+      <button id="btn-check" class="primary">重新檢查全部</button>
+      <span id="counts" class="counts"></span>
+    </div>
+  </section>
+
+  <!-- 3. 辨識 -->
+  <section class="panel step" id="step-3">
+    <h2><span class="step-num">3</span>辨識並產出</h2>
+    <div class="row-actions">
+      <button id="btn-build" class="primary big">開始辨識</button>
+      <!-- autocomplete="off"：不加的話瀏覽器會把上一次輸入的數字自動還原，
+           而**還原的值會被送出**，於是靜靜蓋掉 AI 從譜上讀到的速度。
+           速度偵測本來的設計是「讀不到才問使用者」，不是「預設一個值」。 -->
+      <label class="inline-field">速度 BPM
+        <input type="number" id="bpm" min="20" max="300" step="1"
+               autocomplete="off" placeholder="留空＝自動偵測">
+      </label>
+      <label class="inline-check">
+        <input type="checkbox" id="force"> 全部重跑
+      </label>
+    </div>
+    <!-- 這裡原本寫「節拍器記號（♩=120）」想舉例說明什麼叫節拍器記號，
+         但使用者讀成「它把每首都判成 120」。舉例被當成結論，所以拿掉例子，
+         改成明講「每首各自偵測」。 -->
+    <p class="hint">速度由 AI 讀<b>這份譜上印的</b>記號決定（節拍器記號、或 Allegro 之類的術語），
+      每首各自偵測。<b>留空就好</b> —— 只有辨識完顯示「偵測不到速度」時才需要自己填。</p>
+    <div id="build-progress" class="progress" hidden>
+      <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+      <div class="progress-meta">
+        <span id="progress-stage"></span>
+        <span id="progress-percent" class="progress-percent"></span>
+      </div>
+    </div>
+    <div id="build-stage" class="status-line"></div>
+    <div id="build-warning" class="build-warning" hidden></div>
+    <pre id="build-log" class="log" hidden></pre>
+    <div id="build-result"></div>
+  </section>
+
+  <!-- 4. 檢查辨識結果 -->
+  <section class="panel step" id="preview-panel" hidden>
+    <h2><span class="step-num">4</span>檢查辨識對不對<span class="sub">聽起來不對，就是認錯了 —— 這是最快的驗證方式</span></h2>
+    <div class="row-actions">
+      <button id="btn-play" class="primary">試聽</button>
+      <button id="btn-restart">從頭</button>
+      <span class="divider"></span>
+      <span id="level-buttons" class="btn-group"></span>
+      <span class="divider"></span>
+      <span class="btn-group">
+        <button id="mode-roll" class="primary">鋼琴捲軸</button>
+        <button id="mode-fall">落下預覽</button>
+      </span>
+    </div>
+    <div id="preview-info" class="status-line"></div>
+    <div id="preview-scroll" class="preview-scroll">
+      <canvas id="preview-canvas"></canvas>
+    </div>
+    <p class="hint legend">
+      <span class="key"><span class="dot r"></span>右手</span>
+      <span class="key"><span class="dot l"></span>左手</span>
+      <span class="key"><span class="dot bad"></span>辨識不可靠</span>
+      <span>鋼琴捲軸可以點任一處跳到那個時間點。「落下預覽」就是 Unity 音遊之後會有的畫面。</span>
+    </p>
+  </section>
+
+  <!-- 5. 逐小節校對。AI 已經知道自己哪幾節讀不準（拍數對不上拍號），
+       原始照片上的座標也早就算好了，只是以前沒有拿出來給人看。 -->
+  <section class="panel step" id="proof-panel" hidden>
+    <h2><span class="step-num">5</span>逐小節校對<span class="sub">AI 自己標出讀不準的地方，對照原譜確認</span></h2>
+    <div id="proof-summary" class="status-line"></div>
+    <div class="proof-body">
+      <ol id="proof-list" class="proof-list"></ol>
+      <div id="proof-detail" class="proof-detail">
+        <div class="empty">
+          <b>點左邊任一小節</b>
+          <span>這裡會顯示譜上原本印的樣子。</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- 還沒開啟任何專案時的歡迎畫面。這個工具多半是從 Unity 的「加入新樂譜」
+     或 加樂譜.bat 進來的，來的人十之八九是第一次用，所以這裡要把
+     「這是什麼、怎麼走、從哪裡開始」一次講完。 -->
+<section id="no-project" class="welcome">
+  <h1>把樂譜變成電腦看得懂的樣子</h1>
+  <p class="welcome-lead">
+    拍下樂譜的每一頁，AI 幫你認成音符 —— 之後就能拿來評分你的演奏，也能直接進音遊玩。
+  </p>
+
+  <ol class="welcome-flow">
+    <li>
+      <span class="flow-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"
+             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L17 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+          <circle cx="12" cy="12.5" r="3.5"></circle>
+        </svg>
+      </span>
+      <b>拍照上傳</b>
+      <span>每一頁拍清楚，系統先幫你檢查拍得能不能用</span>
+    </li>
+    <li>
+      <span class="flow-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"
+             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3v3"></path><path d="M12 18v3"></path>
+          <path d="M5.6 5.6l2.1 2.1"></path><path d="M16.3 16.3l2.1 2.1"></path>
+          <path d="M3 12h3"></path><path d="M18 12h3"></path>
+          <path d="M5.6 18.4l2.1-2.1"></path><path d="M16.3 7.7l2.1-2.1"></path>
+        </svg>
+      </span>
+      <b>AI 辨識</b>
+      <span>認成音符，並自己標出哪幾小節讀得不準</span>
+    </li>
+    <li>
+      <span class="flow-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"
+             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18V5l10-2v13"></path>
+          <circle cx="6" cy="18" r="3"></circle><circle cx="16" cy="16" r="3"></circle>
+        </svg>
+      </span>
+      <b>試聽 / 進音遊</b>
+      <span>聽起來對就是認對了，然後拿去評分或玩</span>
+    </li>
+  </ol>
+
+  <button id="welcome-new" class="primary big">新增樂譜專案</button>
+
+  <details class="welcome-tips">
+    <summary>照片要怎麼拍，AI 才認得準？</summary>
+    <p id="welcome-photo-hint"></p>
+    <ul>
+      <li>整頁入鏡，四周留一點空白 —— 邊緣被切到的譜線救不回來</li>
+      <li>正對著拍，不要斜的。歪超過 8 度會直接退件</li>
+      <li>光線平均，避免反光和陰影蓋住五線譜</li>
+      <li>也可以不拍照 —— 用數字記譜（1-7）或字母記譜（C-B）打成 .txt 上傳</li>
+    </ul>
+  </details>
+
+  <div id="welcome-existing" class="welcome-existing" hidden>
+    <h2>或繼續之前的</h2>
+    <div id="welcome-list" class="welcome-list"></div>
+  </div>
+</section>
+
+<!-- 標註圖 / 記譜原文的檢視視窗 -->
+<div id="viewer" class="viewer" hidden>
+  <div class="viewer-inner">
+    <div class="viewer-head">
+      <span id="viewer-title"></span>
+      <button id="viewer-close" class="ghost">關閉</button>
+    </div>
+    <div id="viewer-body" class="viewer-body"></div>
+  </div>
+</div>
+
+<!-- 新增專案 -->
+<div id="newdlg" class="viewer" hidden>
+  <div class="viewer-inner narrow">
+    <div class="viewer-head"><span>新增樂譜專案</span>
+      <button id="newdlg-close" class="ghost">取消</button></div>
+    <div class="viewer-body">
+      <label class="field">名稱
+        <input type="text" id="new-name" placeholder="例如：小星星變奏曲">
+      </label>
+      <fieldset class="field">
+        <legend>樂譜來源</legend>
+        <label class="radio"><input type="radio" name="stype" value="photo" checked>
+          <span><b>拍照的五線譜</b><small>上傳 jpg / png / pdf，用 AI 辨識</small></span></label>
+        <label class="radio"><input type="radio" name="stype" value="jianpu">
+          <span><b>數字記譜（簡譜）</b><small>上傳 .txt，用 1-7 寫的譜</small></span></label>
+        <label class="radio"><input type="radio" name="stype" value="letter">
+          <span><b>字母記譜</b><small>上傳 .txt，用 C-B 寫的譜</small></span></label>
+      </fieldset>
+      <div id="notation-help" class="help"></div>
+      <button id="new-create" class="primary big">建立</button>
+      <div id="new-error" class="error-line"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+<script src="/static/preview.js"></script>
+</body>
+</html>
